@@ -130,6 +130,8 @@ bool ei_camera_capture(uint32_t img_width, uint32_t img_height, uint8_t *out_buf
 */
 void setup()
 {
+    const int LED_pin = 13;
+    pinMode(LED_pin, OUTPUT);
     // put your setup code here, to run once:
     Serial.begin(115200);
     //comment out the below line to start inference immediately after upload
@@ -153,7 +155,11 @@ void setup()
 */
 void loop()
 {
-
+    const int LED_pin = 13;
+    digitalWrite(LED_pin, HIGH);  // turn the LED on (HIGH is the voltage level)
+  delay(1000);                      // wait for a second
+  digitalWrite(LED_pin, LOW);   // turn the LED off by making the voltage LOW
+  delay(1000);                      // wait for a second
     // instead of wait_ms, we'll wait on the signal, this allows threads to cancel us...
     if (ei_sleep(5) != EI_IMPULSE_OK) {
         return;

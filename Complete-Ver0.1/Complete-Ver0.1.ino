@@ -1,4 +1,4 @@
-// --- CÓDIGO FINAL PARA TORRETA NERF (COMPORTAMIENTO AGRESIVO) ---
+// --- CÓDIGO FINAL PARA TORRETA NERF (VERSIÓN CORREGIDA Y MEJORADA) ---
 
 #include <Stepper.h>
 #include <AccelStepper.h>
@@ -21,15 +21,13 @@
 // --- AJUSTES DE LA CÁMARA Y SEGUIMIENTO ---
 const int FRAME_WIDTH  = 96;
 const float CONFIDENCE_THRESHOLD = 0.70;
-// CAMBIO: Reducimos la zona muerta para que el movimiento sea MÁS sensible.
-const int CENTER_DEAD_ZONE = 10;
+const int CENTER_DEAD_ZONE = 18;
 
 // --- AJUSTES DE LOS MOTORES ---
 // Motor de Paneo (ULN2003)
 const int PAN_STEPS_PER_REV = 2048;
 const int PAN_MOTOR_SPEED = 20;
-// CAMBIO: Aumentamos los pasos para un movimiento MÁS agresivo.
-const int PAN_STEPS_TO_MOVE = 200;
+const int PAN_STEPS_TO_MOVE = 1500;
 const long MAX_PAN_STEPS_FROM_CENTER = 4265;
 
 // Motor Empujador (A4988)
@@ -39,14 +37,14 @@ const int PUSHER_TRAVEL_STEPS = 400;
 
 // --- AJUSTES DE DISPARO ---
 const int MIN_REV_TIME = 1000;
-// CAMBIO: El enfriamiento entre disparos ahora es de 2 segundos.
-const int FIRE_COOLDOWN = 2000;
+const int FIRE_COOLDOWN = 1500;
 
 //======================================================================
 // --- FIN DE LA CONFIGURACIÓN ---
 //======================================================================
 
-Stepper panStepper(PAN_STEPS_PER_REV, PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN3_PIN, PAN_IN4_PIN);
+// ***** CAMBIO: Corregido el orden de los pines (IN2 y IN3) para movimiento bidireccional *****
+Stepper panStepper(PAN_STEPS_PER_REV, PAN_IN1_PIN, PAN_IN3_PIN, PAN_IN2_PIN, PAN_IN4_PIN);
 AccelStepper pusherStepper(AccelStepper::DRIVER, PUSHER_STEP_PIN, PUSHER_DIR_PIN);
 
 long currentPanPosition = 0;
@@ -69,8 +67,8 @@ void setup() {
   digitalWrite(PUSHER_ENABLE_PIN, HIGH);
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
-  currentPanPosition = 0; 
-  Serial.println("Torreta V2.6 (Agresiva) - Lista.");
+  currentPanPosition = 0;
+  Serial.println("Torreta V2.5 (Parseo Corregido) - Lista.");
 }
 
 void loop() {
@@ -108,10 +106,18 @@ void parseAndTrack(String data) {
   
   lastDetectionTime = millis();
   
-  int x_index = data.indexOf("x: ");
-  if (x_index == -1) return;
-  int x = data.substring(x_index + 3).toInt();
-  int object_center_x = x + (data.substring(data.indexOf("width: ") + 7)).toInt() / 2;
+  // ***** CAMBIO: Lógica de parseo mejorada para leer números de más de un dígito *****
+  int x_start_index = data.indexOf("x: ") + 3;
+  if (x_start_index == 2) return; // Si no encuentra "x: ", sale
+  int x_end_index = data.indexOf(',', x_start_index); // Busca la coma después de la x
+  int x = data.substring(x_start_index, x_end_index).toInt();
+  
+  int width_start_index = data.indexOf("width: ") + 7;
+  if (width_start_index == 6) return; // Si no encuentra "width: ", sale
+  int width_end_index = data.indexOf(']', width_start_index); // Busca el corchete después del width
+  int width = data.substring(width_start_index, width_end_index).toInt();
+
+  int object_center_x = x + (width / 2);
   
   int error = object_center_x - (FRAME_WIDTH / 2);
 
@@ -155,8 +161,7 @@ void handleFiringSequence() {
     Serial.println("Secuencia de disparo completa. Apagando motores.");
     firingState = IDLE;
     lastFireTime = millis();
-    digitalWrite(PUSHER_ENABLE_PIN, HIGH); 
-    // CAMBIO: Apaga el relé inmediatamente después de un disparo.
+    digitalWrite(PUSHER_ENABLE_PIN, HIGH);
     digitalWrite(RELAY_PIN, LOW); 
   }
 }

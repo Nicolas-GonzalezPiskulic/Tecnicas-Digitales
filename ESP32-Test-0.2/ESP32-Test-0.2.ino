@@ -1,4 +1,4 @@
-// --- CÓDIGO FINAL PARA TORRETA NERF (COMPORTAMIENTO AGRESIVO) ---
+// --- CÓDIGO FINAL PARA TORRETA NERF (AJUSTE DE PARÁMETROS) ---
 
 #include <Stepper.h>
 #include <AccelStepper.h>
@@ -15,22 +15,23 @@
 #define PAN_IN4_PIN 26
 #define PUSHER_STEP_PIN 18
 #define PUSHER_DIR_PIN  19
-#define PUSHER_ENABLE_PIN 14
+#define PUSHER_ENABLE_PIN 22
 #define RELAY_PIN 23
 
 // --- AJUSTES DE LA CÁMARA Y SEGUIMIENTO ---
 const int FRAME_WIDTH  = 96;
 const float CONFIDENCE_THRESHOLD = 0.70;
-// CAMBIO: Reducimos la zona muerta para que el movimiento sea MÁS sensible.
-const int CENTER_DEAD_ZONE = 10;
+const int CENTER_DEAD_ZONE = 18;
 
 // --- AJUSTES DE LOS MOTORES ---
 // Motor de Paneo (ULN2003)
-const int PAN_STEPS_PER_REV = 2048;
+// CAMBIO: Valores ajustados según tu petición.
+const int PAN_STEPS_PER_MOTOR_REV = 2048;
 const int PAN_MOTOR_SPEED = 20;
-// CAMBIO: Aumentamos los pasos para un movimiento MÁS agresivo.
-const int PAN_STEPS_TO_MOVE = 200;
-const long MAX_PAN_STEPS_FROM_CENTER = 4265;
+const int PAN_STEPS_TO_MOVE = 1500;
+// CAMBIO: Límite de movimiento basado en los 11900 pasos para una vuelta completa.
+const long PAN_STEPS_FOR_FULL_PLATFORM_REVOLUTION = 11900;
+const long MAX_PAN_STEPS_FROM_CENTER = PAN_STEPS_FOR_FULL_PLATFORM_REVOLUTION / 4; // Límite para 90 grados a cada lado.
 
 // Motor Empujador (A4988)
 const int PUSHER_MAX_SPEED = 1500;
@@ -39,14 +40,13 @@ const int PUSHER_TRAVEL_STEPS = 400;
 
 // --- AJUSTES DE DISPARO ---
 const int MIN_REV_TIME = 1000;
-// CAMBIO: El enfriamiento entre disparos ahora es de 2 segundos.
-const int FIRE_COOLDOWN = 2000;
+const int FIRE_COOLDOWN = 1500;
 
 //======================================================================
 // --- FIN DE LA CONFIGURACIÓN ---
 //======================================================================
 
-Stepper panStepper(PAN_STEPS_PER_REV, PAN_IN1_PIN, PAN_IN2_PIN, PAN_IN3_PIN, PAN_IN4_PIN);
+Stepper panStepper(PAN_STEPS_PER_MOTOR_REV, PAN_IN1_PIN, PAN_IN3_PIN, PAN_IN2_PIN, PAN_IN4_PIN);
 AccelStepper pusherStepper(AccelStepper::DRIVER, PUSHER_STEP_PIN, PUSHER_DIR_PIN);
 
 long currentPanPosition = 0;
@@ -69,8 +69,8 @@ void setup() {
   digitalWrite(PUSHER_ENABLE_PIN, HIGH);
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
-  currentPanPosition = 0; 
-  Serial.println("Torreta V2.6 (Agresiva) - Lista.");
+  currentPanPosition = 0;
+  Serial.println("Torreta V2.6 (Parámetros Ajustados) - Lista.");
 }
 
 void loop() {
@@ -108,10 +108,13 @@ void parseAndTrack(String data) {
   
   lastDetectionTime = millis();
   
-  int x_index = data.indexOf("x: ");
-  if (x_index == -1) return;
-  int x = data.substring(x_index + 3).toInt();
-  int object_center_x = x + (data.substring(data.indexOf("width: ") + 7)).toInt() / 2;
+  int x_start_index = data.indexOf("x: ") + 3;
+  if (x_start_index == 2) return;
+  int x_end_index = data.indexOf(',', x_start_index);
+  int x = data.substring(x_start_index, x_end_index).toInt();
+  
+  // CAMBIO: Ahora se usa directamente 'x' como el centro del objetivo, ignorando el 'width'.
+  int object_center_x = x;
   
   int error = object_center_x - (FRAME_WIDTH / 2);
 
@@ -155,8 +158,7 @@ void handleFiringSequence() {
     Serial.println("Secuencia de disparo completa. Apagando motores.");
     firingState = IDLE;
     lastFireTime = millis();
-    digitalWrite(PUSHER_ENABLE_PIN, HIGH); 
-    // CAMBIO: Apaga el relé inmediatamente después de un disparo.
+    digitalWrite(PUSHER_ENABLE_PIN, HIGH);
     digitalWrite(RELAY_PIN, LOW); 
   }
 }
