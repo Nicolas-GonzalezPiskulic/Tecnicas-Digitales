@@ -1,4 +1,4 @@
-// --- CÓDIGO FINAL PARA TORRETA NERF (V2.22 - LÓGICA DE PANEO CORREGIDA) ---
+// --- CÓDIGO FINAL PARA TORRETA NERF (V2.23 - DISPARO ATÓMICO CORREGIDO) ---
 
 #include <AccelStepper.h>
 
@@ -21,7 +21,7 @@
 const int FRAME_WIDTH  = 96;
 const float CONFIDENCE_THRESHOLD = 0.70;
 const int CENTER_DEAD_ZONE = 5;
-const int SETTLE_DELAY_MS = 1000; 
+const int SETTLE_DELAY_MS = 1000;
 
 // --- AJUSTES DE LOS MOTORES ---
 // Motor de Paneo (ULN2003)
@@ -38,12 +38,12 @@ const int PUSHER_ACCELERATION = 1000;
 const int PUSHER_TRAVEL_STEPS = 400;
 
 // --- AJUSTES DE DISPARO ---
+// Mencionaste "medio segundo", así que puedes cambiar 1000 a 500 si lo deseas.
 const int MIN_REV_TIME = 1000; 
 const int FIRE_COOLDOWN = 1000;
 
 // --- CONFIGURACIÓN DE DEPURACIÓN ---
-const int DEBUG_DELAY_MS = 0; 
-
+const int DEBUG_DELAY_MS = 0;
 //======================================================================
 // --- FIN DE LA CONFIGURACIÓN ---
 //======================================================================
@@ -86,12 +86,12 @@ void setup() {
   pinMode(RELAY_PIN, OUTPUT);
   digitalWrite(RELAY_PIN, LOW);
   
-  Serial.println("--- INICIANDO TORRETA V2.22 (Paneo Corregido) ---");
+  Serial.println("--- INICIANDO TORRETA V2.23 (Disparo Corregido) ---");
   Serial.println("--- CALIBRANDO... ---");
   
-  panStepper.runToNewPosition(2975);
+  panStepper.runToNewPosition(1190);
   Serial.println("[DEBUG] Calibración: Derecha...");
-  panStepper.runToNewPosition(2975 - 5950);
+  panStepper.runToNewPosition(-1190);
   Serial.println("[DEBUG] Calibración: Izquierda...");
   panStepper.runToNewPosition(0);
   Serial.println("[DEBUG] Calibración: Centro...");
@@ -128,13 +128,15 @@ void loop() {
   
   // 3. Lógica principal de cámara y timeout
   bool isSettled = millis() - motorSettleTime > SETTLE_DELAY_MS;
-  if (!isPanMotorMoving && isSettled) {
-    handleSerial();
-    handleTimeout(); 
-  }
   
   // 4. La secuencia de disparo se ejecuta siempre
   handleFiringSequence();
+  
+  // 5. Solo leemos la cámara y comprobamos el timeout si el motor está quieto y asentado
+  if (!isPanMotorMoving && isSettled) {
+    handleSerial();
+    handleTimeout(); // Esta función ahora se auto-desactiva si está disparando
+  }
 }
 
 void handleSerial() {
@@ -186,12 +188,11 @@ void parseAndTrack(String data) {
   if (abs(error) > CENTER_DEAD_ZONE) {
     Serial.println("[DEBUG] DECISIÓN: Mover.");
     long newPos = currentPanPosition;
-    
-    // ***** CAMBIO: LÓGICA INVERTIDA *****
+    // ***** LÓGICA INVERTIDA (DEJAR COMO ESTÁ) *****
     if (error < 0) { // Mover a la izquierda (Error negativo)
       Serial.println("[DEBUG] Dirección: IZQUIERDA (Físicamente)");
       // El motor ahora se mueve a una POSICIÓN POSITIVA
-      newPos += PAN_STEPS_TO_MOVE; 
+      newPos += PAN_STEPS_TO_MOVE;
     } else { // Mover a la derecha (Error positivo)
       Serial.println("[DEBUG] Dirección: DERECHA (Físicamente)");
       // El motor ahora se mueve a una POSICIÓN NEGATIVA
@@ -251,7 +252,18 @@ void handleFiringSequence() {
   }
 }
 
+// =====================================================================
+// --- FUNCIÓN CORREGIDA ---
+// =====================================================================
 void handleTimeout() {
+  // --- INICIO DE LA MODIFICACIÓN ---
+  // Si estamos en cualquier estado de disparo (REVING, PUSHING, RETRACTING),
+  // no debemos ejecutar la lógica de timeout. El disparo debe completarse.
+  if (firingState != IDLE) {
+    return;
+  }
+  // --- FIN DE LA MODIFICACIÓN ---
+
   if (millis() - lastDetectionTime > DETECTION_TIMEOUT && lastDetectionTime != 0) {
     Serial.println("\n[DEBUG] TIMEOUT: Objetivo perdido. Volviendo al centro.");
     digitalWrite(RELAY_PIN, LOW);
